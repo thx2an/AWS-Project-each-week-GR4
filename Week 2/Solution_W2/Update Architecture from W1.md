@@ -1,5 +1,5 @@
-## #GÓP Ý SỬA/THÊM CHO KIẾN TRÚC DIAGRAM TUẦN 2
-Dựa trên hình 3-tier.png hiện tại, hệ thống giám khảo sẽ "soi" những thiếu sót sau so với yêu cầu Tuần 2:
+## GÓP Ý SỬA/THÊM CHO KIẾN TRÚC DIAGRAM TUẦN 2
+Dựa trên hình 3-tier.png hiện tại, chúng ta sẽ có nhưng solution như sau:
 
 1. Thiếu kho lưu trữ S3 (Bắt buộc phải có ít nhất 2 bucket)
 
