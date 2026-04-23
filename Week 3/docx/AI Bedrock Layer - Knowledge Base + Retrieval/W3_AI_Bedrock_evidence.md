@@ -27,67 +27,44 @@ Tài liệu này minh chứng việc triển khai Knowledge Base sử dụng Ama
 
 ---
 
-## Bước 2: Chuẩn bị Layer (Thư viện MySQL)
-
+2. Chuẩn bị Layer (Thư viện MySQL)
 Lambda mặc định không có thư viện để kết nối MySQL. Bạn phải tự tạo một "Layer" và upload lên.
+Các bước thực hiện trên máy tính cá nhân:
+Tạo một thư mục tên là nodejs. (Bắt buộc phải tên là nodejs).
+Mở Terminal/CMD tại thư mục đó và chạy lệnh:
+Bash
+npm install mysql2
+Nén thư mục nodejs này lại thành file mysql-layer.zip.
+Lên AWS Console -> Lambda -> Layers -> Create layer.
+Đặt tên là mysql2-library, upload file .zip lên và chọn Runtime là Node.js 20.x.
 
-**Các bước thực hiện trên máy tính cá nhân:**
-1. Tạo một thư mục tên là `nodejs`. *(Bắt buộc phải tên là `nodejs`)*.
-2. Mở Terminal/CMD tại thư mục đó và chạy lệnh:
-   ```bash
-   npm install mysql2
-   ```
-3. Nén thư mục `nodejs` này lại thành file `mysql-layer.zip`.
-4. Lên **AWS Console** -> **Lambda** -> **Layers** -> **Create layer**.
-5. Đặt tên là `mysql2-library`, upload file `.zip` lên và chọn Runtime là **Node.js 20.x**.
-
----
-
-## Bước 3: Cấu hình IAM Role
-
+3. Cấu hình IAM Role
 Lambda cần "thẻ quyền lực" để nói chuyện với các dịch vụ khác. Tạo 1 Role mới cho Lambda với Policy JSON như sau:
-
 ![](Sceenshot/policy.jpg)
 
----
-
-## Bước 4: Cấu hình Mạng (VPC & Security Group)
-
-Đây là phần khó nhất, nếu cấu hình sai Lambda sẽ bị Timeout.
-
-### A. Security Group (SG)
-* **Lambda-SG:** Không cần cấu hình Inbound Rule, Outbound cho phép tất cả (All traffic).
-* **RDS-SG:** Thêm Inbound Rule cho cổng `3306`, Source là ID của `Lambda-SG`.
-
-### B. VPC Endpoint
+4. Cấu hình Mạng (VPC & Security Group)
+Đây là phần khó nhất, nếu sai Lambda sẽ bị Timeout.
+A. Security Group (SG)
+Lambda-SG: Không cần Inbound, Outbound cho phép tất cả.
+RDS-SG: Thêm Inbound Rule cho cổng 3306, Source là ID của Lambda-SG.
+B. VPC Endpoint
 Vì Lambda nằm trong Private Subnet, nó cần "cổng đi tắt" để gọi Bedrock:
-1. Vào **VPC** -> **Endpoints** -> **Create**.
-2. Tìm Service: `com.amazonaws.us-west-2.bedrock-agent` *(Lưu ý: bắt buộc phải có chữ agent)*.
-3. Chọn đúng VPC và Subnets mà Lambda đang dùng.
-4. Gán Security Group cho phép cổng `443` (HTTPS) từ Lambda.
-
+Vào VPC -> Endpoints -> Create.
+Tìm Service: com.amazonaws.us-west-2.bedrock-agent (Lưu ý: phải có chữ agent).
+Chọn đúng VPC và Subnets mà Lambda đang dùng.
+Gán Security Group cho phép cổng 443 từ Lambda.
 ![](Sceenshot/vpc.jpg)
 
----
-
-## Bước 5: Tạo Lambda & Cấu hình
-
-1. **Tạo Lambda Function:** Chọn Runtime là **Node.js 20.x**.
-2. **Gán Layer:** Kéo xuống dưới cùng trang Lambda -> **Add a layer** -> **Custom layers** -> Chọn `mysql2-library` đã tạo ở Bước 2.
-3. **Cấu hình VPC:** Chọn đúng VPC, Subnets và `Lambda-SG`.
-   > **Quan trọng:** Chọn **IPv4 only** ở phần IP address type.
-4. **Biến môi trường (Environment Variables):**
-   * `DATA_SOURCE_ID`: ID của Data Source (Lấy trong phần cấu hình Data source của Bedrock Console).
-   * Khai báo thêm các biến môi trường cho Database (như DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, KB_ID, S3_BUCKET).
-
+5. Tạo Lambda & Cấu hình
+Tạo Lambda Function (Node.js 20.x).
+Gán Layer: Kéo xuống dưới cùng trang Lambda -> Add a layer -> Custom layers -> Chọn cái mysql2-library đã tạo ở Bước 2.
+Cấu hình VPC: * Chọn đúng VPC, Subnets và Lambda-SG.
+Quan trọng: Chọn IPv4 only ở phần IP address type.
+Biến môi trường (Environment Variables):
 ![](Sceenshot/env.jpg)
+DATA_SOURCE_ID: ID của Data Source (lấy trong Bedrock Console).
 
----
-
-## Bước 6: Code logic xử lý (index.mjs)
-
-Đoạn mã sau sẽ thực hiện chuỗi hành động: kết nối RDS -> lấy dữ liệu -> đẩy file lên S3 -> kích hoạt Bedrock Sync.
-
+6. Code logic xử lý (index.mjs)
 ```javascript
 import mysql from 'mysql2/promise';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -154,13 +131,13 @@ export const handler = async (event) => {
 };
 ```
 
----
+7. Tự động hóa (Trigger)
+Để hệ thống tự cập nhật dữ liệu mỗi ngày:
 
-## Bước 7: Tự động hóa (Trigger)
+Tại giao diện Lambda, nhấn Add trigger.
 
-Để hệ thống tự động cập nhật dữ liệu hàng ngày mà không cần ấn thủ công:
+Chọn EventBridge (CloudWatch Events).
 
-1. Tại giao diện hàm Lambda, nhấn **Add trigger**.
-2. Chọn nguồn là **EventBridge (CloudWatch Events)**.
-3. Tạo Rule mới, chọn **Schedule expression**.
-4. Nhập biểu thức: `rate(1 day)` *(Cứ 24h tự động chạy hàm 1 lần)*.
+Tạo Rule mới, chọn Schedule expression.
+
+Nhập: rate(1 day) (Cứ 24h tự chạy 1 lần).
