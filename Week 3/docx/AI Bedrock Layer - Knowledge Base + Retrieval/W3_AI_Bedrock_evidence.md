@@ -1,4 +1,4 @@
-#  AI Bedrock Layer - Knowledge Base + Retrieval
+# 🤖 AI Bedrock Layer - Knowledge Base + Retrieval
 
 Tài liệu này minh chứng việc triển khai Knowledge Base sử dụng Amazon Bedrock để trả lời các câu hỏi dựa trên dữ liệu sản phẩm.
 
@@ -27,60 +27,140 @@ Tài liệu này minh chứng việc triển khai Knowledge Base sử dụng Ama
 
 ---
 
-## Bước 2: Thiết lập Quyền hạn (IAM Roles)
+## Bước 2: Chuẩn bị Layer (Thư viện MySQL)
 
-Role thực thi cho Lambda được đặt tên là `Lambda-Bedrock-Query-Role`.
+Lambda mặc định không có thư viện để kết nối MySQL. Bạn phải tự tạo một "Layer" và upload lên.
 
-* **Policies đính kèm:**
-  1. `AWSLambdaVPCAccessExecutionRole`: Cho phép Lambda truy cập tài nguyên trong VPC.
-  2. `Lambda-Bedrock-Query` (Inline Policy): Cho phép thao tác với dịch vụ Bedrock.
-
-* **Chi tiết quyền (Permissions):**
-  * `bedrock:RetrieveAndGenerate`: Truy vấn và tạo câu trả lời.
-  * `bedrock:Retrieve`: Truy xuất dữ liệu từ Knowledge Base.
-  * `bedrock:InvokeModel`: Gọi mô hình ngôn ngữ (Nova Lite).
-  * `bedrock:GetInferenceProfile`: Đọc hồ sơ định tuyến cho model Nova.
-
-  ![](Sceenshot/policy.png)
+**Các bước thực hiện trên máy tính cá nhân:**
+1. Tạo một thư mục tên là `nodejs`. *(Bắt buộc phải tên là `nodejs`)*.
+2. Mở Terminal/CMD tại thư mục đó và chạy lệnh:
+   ```bash
+   npm install mysql2
+   ```
+3. Nén thư mục `nodejs` này lại thành file `mysql-layer.zip`.
+4. Lên **AWS Console** -> **Lambda** -> **Layers** -> **Create layer**.
+5. Đặt tên là `mysql2-library`, upload file `.zip` lên và chọn Runtime là **Node.js 20.x**.
 
 ---
 
-## Bước 3: Cấu hình Mạng (VPC Endpoint)
+## Bước 3: Cấu hình IAM Role
 
-* **VPC Interface Endpoint:** Tạo endpoint cho dịch vụ `bedrock-agent-runtime` để Lambda gọi Bedrock qua mạng nội bộ của AWS mà không cần đi qua Internet (Tăng tính bảo mật và giảm độ trễ).
-* **Security Group:** Cấu hình Inbound Rules cho phép cổng `443` (HTTPS) để giao tiếp giữa Lambda và Endpoint.
+Lambda cần "thẻ quyền lực" để nói chuyện với các dịch vụ khác. Tạo 1 Role mới cho Lambda với Policy JSON như sau:
+
+![](Sceenshot/policy.jpg)
 
 ---
 
-## Bước 4: Triển khai Lambda Function
+## Bước 4: Cấu hình Mạng (VPC & Security Group)
 
-* **Runtime:** Node.js 20.x.
-* **Mô hình sử dụng:** Amazon Nova Lite v1.0 (thông qua Inference Profile).
-* **Prompt Template:** Được tối ưu hóa để AI hiểu các từ viết tắt phổ biến trong shop (như *"ip15"*, *"mb"*, *"ap"*).
+Đây là phần khó nhất, nếu cấu hình sai Lambda sẽ bị Timeout.
 
-**Đoạn mã xử lý chính (Lambda Serverless Glue):**
+### A. Security Group (SG)
+* **Lambda-SG:** Không cần cấu hình Inbound Rule, Outbound cho phép tất cả (All traffic).
+* **RDS-SG:** Thêm Inbound Rule cho cổng `3306`, Source là ID của `Lambda-SG`.
+
+### B. VPC Endpoint
+Vì Lambda nằm trong Private Subnet, nó cần "cổng đi tắt" để gọi Bedrock:
+1. Vào **VPC** -> **Endpoints** -> **Create**.
+2. Tìm Service: `com.amazonaws.us-west-2.bedrock-agent` *(Lưu ý: bắt buộc phải có chữ agent)*.
+3. Chọn đúng VPC và Subnets mà Lambda đang dùng.
+4. Gán Security Group cho phép cổng `443` (HTTPS) từ Lambda.
+
+![](Sceenshot/vpc.jpg)
+
+---
+
+## Bước 5: Tạo Lambda & Cấu hình
+
+1. **Tạo Lambda Function:** Chọn Runtime là **Node.js 20.x**.
+2. **Gán Layer:** Kéo xuống dưới cùng trang Lambda -> **Add a layer** -> **Custom layers** -> Chọn `mysql2-library` đã tạo ở Bước 2.
+3. **Cấu hình VPC:** Chọn đúng VPC, Subnets và `Lambda-SG`.
+   > **Quan trọng:** Chọn **IPv4 only** ở phần IP address type.
+4. **Biến môi trường (Environment Variables):**
+   * `DATA_SOURCE_ID`: ID của Data Source (Lấy trong phần cấu hình Data source của Bedrock Console).
+   * Khai báo thêm các biến môi trường cho Database (như DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, KB_ID, S3_BUCKET).
+
+![](Sceenshot/env.jpg)
+
+---
+
+## Bước 6: Code logic xử lý (index.mjs)
+
+Đoạn mã sau sẽ thực hiện chuỗi hành động: kết nối RDS -> lấy dữ liệu -> đẩy file lên S3 -> kích hoạt Bedrock Sync.
+
 ```javascript
-const modelArn = "arn:aws:bedrock:us-west-2:041627896542:inference-profile/us.amazon.nova-lite-v1:0";
-const command = new RetrieveAndGenerateCommand({
-    input: { text: userQuestion },
-    retrieveAndGenerateConfiguration: {
-        type: "KNOWLEDGE_BASE",
-        knowledgeBaseConfiguration: {
-            knowledgeBaseId: "AVHHNWOIBA",
-            modelArn: modelArn,
-            generationConfiguration: {
-                promptTemplate: {
-                    textPromptTemplate: "Bạn là trợ lý bán hàng shop mini_e. Dựa trên $search_results$, trả lời: $query$"
-                }
-            }
-        }
+import mysql from 'mysql2/promise';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { BedrockAgentClient, StartIngestionJobCommand } from "@aws-sdk/client-bedrock-agent";
+
+// Khởi tạo các Client bên ngoài handler để tái sử dụng (tăng hiệu năng)
+const s3Client = new S3Client({});
+const bedrockClient = new BedrockAgentClient({ region: "us-west-2" });
+
+export const handler = async (event) => {
+    let connection;
+    try {
+        console.log("Đang kết nối tới RDS...");
+        connection = await mysql.createConnection({
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME
+        });
+
+        // 1. Lấy dữ liệu sản phẩm từ bảng của dự án
+        const [rows] = await connection.execute('SELECT * FROM products');
+        
+        // 2. Chuyển dữ liệu thành dạng văn bản để AI dễ đọc
+        const dataContent = rows.map(item => 
+            `Sản phẩm: ${item.title} | Giá: ${item.price} | Mô tả: ${item.description}`
+        ).join('\n');
+
+        console.log("Đang upload dữ liệu lên S3...");
+        // 3. Đẩy file lên S3 (tên key phải khớp với policy/dataSource)
+        await s3Client.send(new PutObjectCommand({
+            Bucket: process.env.S3_BUCKET,
+            Key: 'products_data.txt',
+            Body: dataContent,
+            ContentType: 'text/plain'
+        }));
+
+        console.log("Đang kích hoạt Bedrock Sync...");
+        // 4. Ra lệnh cho Bedrock cập nhật kiến thức mới
+        await bedrockClient.send(new StartIngestionJobCommand({
+            knowledgeBaseId: process.env.KB_ID,
+            dataSourceId: process.env.DATA_SOURCE_ID
+        }));
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: "Đồng bộ dữ liệu dự án mini_e thành công!" })
+        };
+
+    } catch (error) {
+        console.error("Lỗi chi tiết từ AWS:", error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ 
+                msg: error.message || "Không có message",
+                code: error.code || error.name || "Không có code",
+                requestId: error.$metadata?.requestId || "N/A",
+                stack: error.stack // In stack trace để xác định chính xác dòng bị lỗi
+            })
+        };
+    } finally {
+        if (connection) await connection.end();
     }
-});
+};
 ```
 
-### Kết quả Thực Tế
-Test với truy vấn từ người dùng, AI phản hồi tốt dựa trên RAG:
+---
 
-![](Sceenshot/query.png)
+## Bước 7: Tự động hóa (Trigger)
 
-![](Sceenshot/result.png)
+Để hệ thống tự động cập nhật dữ liệu hàng ngày mà không cần ấn thủ công:
+
+1. Tại giao diện hàm Lambda, nhấn **Add trigger**.
+2. Chọn nguồn là **EventBridge (CloudWatch Events)**.
+3. Tạo Rule mới, chọn **Schedule expression**.
+4. Nhập biểu thức: `rate(1 day)` *(Cứ 24h tự động chạy hàm 1 lần)*.
