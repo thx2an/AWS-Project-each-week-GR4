@@ -290,6 +290,8 @@ Vì Lambda nằm trong Private Subnet, nó cần "cổng đi tắt" để gọi 
 
   ![VPC Endpoint Configuration](../AI%20Bedrock%20Layer%20-%20Knowledge%20Base%20+%20Retrieval/Sceenshot/vpc.jpg)
 
+  ![alt text](<../AI Bedrock Layer - Knowledge Base + Retrieval/Sceenshot/sg.jpg>)
+
 ### Step 5 - Tạo Lambda & Cấu hình
 
 - Tạo Lambda Function (Node.js 20.x).

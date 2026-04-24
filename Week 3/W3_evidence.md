@@ -3,9 +3,11 @@
 ## 1) Cover
 
 - **Group number**: 7
+
+- **Group leader**: Phạm Hữu Tiến Thành
+
 - **Members**:
   - Ngô Nguyễn Trường An
-  - Phạm Hữu Tiến Thành
   - Nguyễn Văn Huy Hoàng
   - Nguyễn Phú Tài
   - Lê Thanh Sang
