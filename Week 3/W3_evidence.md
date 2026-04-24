@@ -253,7 +253,7 @@ aws rds describe-db-instances \
 
 > Primary đang ở `us-west-2b` (sau failover), Standby ở `us-west-2a`. Multi-AZ cross-AZ thật sự.
 
-![RDS Ceck primary and secondary](../Database%20Layer/Screenshot/image11.png)
+![RDS Ceck primary and secondary](docx/Database%20Layer/Screenshot/image11.png)
 
 
 ---
@@ -262,7 +262,7 @@ aws rds describe-db-instances \
 
 **RDS Console** → `minie-final-cluste` → **Actions** → **Reboot** → tick **"Reboot With Failover?"** → **Confirm**
 
-![RDS Reboot with Failover](../Database%20Layer/Screenshot/image12.png)
+![RDS Reboot with Failover](docx/Database%20Layer/Screenshot/image12.png)
 
 
 
@@ -281,7 +281,7 @@ aws rds describe-db-instances \
 | Apr 24, 09:29 | DB instance restarted |
 | Apr 24, 09:29 | **Multi-AZ instance failover completed** ✅ |
 
-![ RDS Events Log ](../Database%20Layer/Screenshot/image13.png)
+![ RDS Events Log ](docx/Database%20Layer/Screenshot/image13.png)
 
 ---
 
