@@ -57,6 +57,7 @@ Vì Lambda nằm trong Private Subnet, nó cần "cổng đi tắt" để gọi 
 * Chọn đúng VPC và Subnets mà Lambda đang dùng.
 * Gán Security Group cho phép cổng 443 từ Lambda.
 ![](Sceenshot/vpc.jpg)
+![](Sceenshot/sg.jpg)
 
 ## 5. Tạo Lambda & Cấu hình
 * Tạo Lambda Function (Node.js 20.x).
