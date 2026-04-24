@@ -4,7 +4,7 @@ Tài liệu này minh chứng việc triển khai Knowledge Base sử dụng Ama
 
 ---
 
-## Bước 1: Khởi tạo S3 Bucket và Amazon Bedrock Knowledge Base
+## 1: Khởi tạo S3 Bucket và Amazon Bedrock Knowledge Base
 
 * **1.1. Chuẩn bị S3 Bucket:** Đây là nơi chứa các file text về sản phẩm của Database.
 * **1.2. Tạo dữ liệu mẫu:** Tạo sẵn 3 file text (`.txt` hoặc `.json`) để test ghi thông tin 3 sản phẩm của bạn (ví dụ: `sp1.txt`, `sp2.txt`, `sp3.txt`) và nhấn Upload vào bucket S3 này.
@@ -57,6 +57,7 @@ Vì Lambda nằm trong Private Subnet, nó cần "cổng đi tắt" để gọi 
 * Chọn đúng VPC và Subnets mà Lambda đang dùng.
 * Gán Security Group cho phép cổng 443 từ Lambda.
 ![](Sceenshot/vpc.jpg)
+![](Sceenshot/sg.jpg)
 
 ## 5. Tạo Lambda & Cấu hình
 * Tạo Lambda Function (Node.js 20.x).
@@ -67,7 +68,63 @@ Vì Lambda nằm trong Private Subnet, nó cần "cổng đi tắt" để gọi 
 ![](Sceenshot/env.jpg)
 DATA_SOURCE_ID: ID của Data Source (lấy trong Bedrock Console).
 
-## 6. Code logic xử lý (index.mjs)
+## 6. Code logic xử lý (index.mjs + query)
+```javascript
+import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } from "@aws-sdk/client-bedrock-agent-runtime";
+
+const client = new BedrockAgentRuntimeClient({ region: "us-west-2" });
+
+export const handler = async (event) => {
+    // Nếu không có câu hỏi, mặc định hỏi về áo để test
+    const userQuestion = event.question || "Shop có áo gì không?";
+    const knowledgeBaseId = "AVHHNWOIBA"; 
+    const modelArn = "arn:aws:bedrock:us-west-2:041627896542:inference-profile/us.amazon.nova-lite-v1:0";
+
+    try {
+        const command = new RetrieveAndGenerateCommand({
+            input: { text: userQuestion },
+            retrieveAndGenerateConfiguration: {
+                type: "KNOWLEDGE_BASE",
+                knowledgeBaseConfiguration: {
+                    knowledgeBaseId: knowledgeBaseId,
+                    modelArn: modelArn,
+                    generationConfiguration: {
+                        promptTemplate: {
+                            textPromptTemplate: `Bạn là chuyên viên tư vấn bán hàng chuyên nghiệp của cửa hàng mini_e. 
+
+Dưới đây là các thông tin sản phẩm được trích xuất từ kho dữ liệu thực tế của shop:
+$search_results$
+
+Nhiệm vụ của bạn:
+1. Trả lời câu hỏi của khách hàng: "$query$" một cách lịch sự và thân thiện.
+2. CHỈ ĐƯỢC trả lời dựa trên thông tin có trong $search_results$. 
+3. Nếu khách hỏi về các sản phẩm KHÔNG CÓ trong dữ liệu (như iPhone, MacBook, đồ điện tử), hãy khéo léo báo rằng hiện tại shop chỉ chuyên các mặt hàng thời trang và chưa có sản phẩm đó.
+4. Không tự ý bịa đặt giá cả hoặc thông tin không có trong tài liệu.`
+                        }
+                    }
+                }
+            }
+        });
+
+        const response = await client.send(command);
+        
+        return {
+            statusCode: 200,
+            body: {
+                answer: response.output.text,
+                citations: response.citations
+            }
+        };
+    } catch (error) {
+        console.error("Lỗi gọi Bedrock:", error);
+        return { 
+            statusCode: 500, 
+            body: { error: error.message } 
+        };
+    }
+};
+```
+
 ```javascript
 import mysql from 'mysql2/promise';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -133,8 +190,14 @@ export const handler = async (event) => {
     }
 };
 ```
+## 7. Test query và sync
+Kết quả Test query:
+![](Sceenshot/query.png)
 
-## 7. Tự động hóa (Trigger)
+Kết quả Test sync:
+![](Sceenshot/sync.png)
+
+## 8. Tự động hóa (Trigger)
 Để hệ thống tự cập nhật dữ liệu mỗi ngày:
 
 * Tại giao diện Lambda, nhấn Add trigger.
