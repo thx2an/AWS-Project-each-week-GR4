@@ -435,16 +435,6 @@ Tầng Application của nhóm gồm các tài nguyên tính toán như ECS và 
 **Notes:**
 Application Load Balancer (ALB) nằm ở tầng public. Security Group của nó được cấu hình để cho phép traffic HTTP/HTTPS vào từ ngoài Internet (`0.0.0.0/0`). Nó đóng vai trò là cổng vào public duy nhất để định tuyến các request đến với tầng private application của nhóm.
 
----
-
-### Scenario dùng NACL thay cho Security Group
-
-**Tình huống:** Nhóm sẽ sử dụng Network ACL (NACL) thay cho Security Group trong trường hợp cần phải deny traffic từ một địa chỉ IP độc hại cụ thể (ví dụ: đang bị tấn công DDoS từ một IP/dải IP đã biết).
-
-**Lý giải:** Các Security Groups là stateful (có trạng thái) và chỉ hỗ trợ luật ALLOW (cho phép). Nếu port 443 đã mở cho mọi IP (`0.0.0.0/0`) trên Security Group, chúng ta không thể chặn riêng lẻ một IP xấu. Ngược lại, NACLs là stateless (không trạng thái), hoạt động ở cấp độ Subnet và hỗ trợ các luật DENY tường minh. Điều này làm cho NACLs trở thành công cụ thích hợp để chặn lưu lượng mạng độc hại ngay từ vòng ngoài (cấp Subnet) trước khi nó kịp chạm tới các instances của chúng ta.
-
----
-
 ## 7) Negative Security Test
 
 ### 1. Scenario 1 – Kiểm thử truy cập trực tiếp vào ECS backend (Bypass ALB)
