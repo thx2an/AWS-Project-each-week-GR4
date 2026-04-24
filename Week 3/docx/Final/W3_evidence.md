@@ -13,7 +13,7 @@
   - Cái Xuân Hoà
 
 - **Chosen database path** (engine + paradigm): **RDS MySQL / relational**
-- **Back-link to Week 2 evidence**: [paste link]
+- **Back-link to Week 2 evidence**: https://github.com/thx2an/AWS-Project-each-week-GR4/blob/690a8c3491b27945b8d790e6fbfde65644cf3e3b/Week%202/W2_evidence.md
 
 ---
 
